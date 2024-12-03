@@ -13,6 +13,7 @@ from io import BytesIO
 from urllib.request import urlopen
 
 from RGGI_plant_analysis import RGGI_capacity
+from SharePointv2.Sharepoint_API import GRAPH_API
 
 RGGI_states = ['CT', 'DE', 'ME', 'MD', 'MA', 'NH', 'NJ', 'NY', 'RI', 'VT'] 
 

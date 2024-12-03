@@ -5,14 +5,18 @@ from bs4 import BeautifulSoup
 import requests
 from datetime import datetime as dt
 import plotly.subplots as sp
+import os
+import pickle
 
 from PJM_retirements import gather_PJM_retirements_with_issues
+from SharePointv2.Sharepoint_API import GRAPH_API
 
 class RGGI_capacity:
-    def __init__(self):
+    def __init__(self,location):
         self.RGGI_states = ['CT', 'DE', 'ME', 'MD', 'MA', 'NH', 'NJ', 'NY', 'RI', 'VT'] 
         self.Fossil_tech =  ['Petroleum Liquids', 'Natural Gas Steam Turbine','Natural Gas Fired Combined Cycle',
                 'Conventional Steam Coal','Natural Gas Fired Combustion Turbine','Other Gases']   
+        self.location = location
         
     def scrape_recent_EIA_860m(self,lagged_report=1):
         eia_html = requests.get('https://www.eia.gov/electricity/data/eia860m/')
@@ -82,12 +86,17 @@ class RGGI_capacity:
                 next_update_time,recent_report,report_month,report_year,date_of_last_report  =self.scrape_recent_EIA_860m(lagged_report=x)
                 capacity = self.analyse_all_capacity_with_tech(recent_report,report_month,report_year)
                 time_series_historical_capacity = pd.concat([time_series_historical_capacity,capacity],axis=0)
-
-            time_series_historical_capacity.to_pickle('full_capacity_series_with_tech.pkl')
+            folder= GRAPH_API(self.location).find_uniquefolder('\Corporate\Shared Analysis\RGGI_ISO_power_data\PJM\EIA_data')
+            object = pickle.dumps(time_series_historical_capacity)
+            GRAPH_API(self.location).upload_object(object,os.environ['CCap_docs'],folder,'full_capacity_series_with_tech.pkl')
+            
         else:
-            time_series_historical_capacity = pd.read_pickle('full_capacity_series_with_tech.pkl')
+            filestream = GRAPH_API(self.location).download_file('/Corporate/Shared Analysis/RGGI_ISO_power_data/PJM/EIA_data/full_capacity_series_with_tech.pkl')
+            time_series_historical_capacity = pd.read_pickle(filestream)
 
         return time_series_historical_capacity
+    
+
     
     def analyse_RGGI_capacity(self,RGGI_plants):
          #`Nameplate Capacity (MW)`>25 

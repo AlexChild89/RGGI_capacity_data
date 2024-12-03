@@ -10,9 +10,11 @@ from pandas.tseries.offsets import MonthEnd
 from zipfile import ZipFile
 from io import BytesIO
 from urllib.request import urlopen
+import pickle
 
 from RGGI_plant_analysis import RGGI_capacity
 from EIA_emissions_factors import download_EF_from_EIA
+from SharePointv2.Sharepoint_API import GRAPH_API
 
 RGGI_states = ['CT', 'DE', 'ME', 'MD', 'MA', 'NH', 'NJ', 'NY', 'RI', 'VT'] 
 
@@ -93,26 +95,17 @@ def gather_historical_generation(years_back=5):
     return mega_gen_fuel_df
 
 ### Capacity
-def save_historical_capacity_per_plant(read_latest=True):
-    if read_latest == False:
-        time_series_historical_capacity = pd.DataFrame()
-        for x in range(1,12*6):
-            next_update_time,recent_report,report_month,report_year  =RGGI_capacity().scrape_recent_EIA_860m(lagged_report=x)
-            capacity = RGGI_capacity().analyse_all_capacity(recent_report,report_month,report_year)
-            time_series_historical_capacity = pd.concat([time_series_historical_capacity,capacity],axis=0)
-
-        time_series_historical_capacity.to_pickle('full_capacity_series.pkl')
-    else:
-
-        time_series_historical_capacity = pd.read_pickle('full_capacity_series.pkl')
-
-    return time_series_historical_capacity
+def save_historical_capacity_per_plant(location, read_latest=True):
+    filestream = GRAPH_API(location).download_file('/Corporate/Shared Analysis/RGGI_ISO_power_data/PJM/EIA_data/full_capacity_series_with_tech.pkl')
+    rggi_plants = pd.read_pickle(filestream)
+    all_capacity = rggi_plants.groupby(['Plant ID','Energy Source Code','Prime Mover Code','Plant State','report_month', 'report_year'])['Nameplate Capacity (MW)'].sum().to_frame()
+    return all_capacity
 
 
 
-def clean_historical_generators(read_latest):
+def clean_historical_generators(location,read_latest):
     mega_gen_fuel_df = gather_historical_generation(years_back=5)
-    time_series_historical_capacity =save_historical_capacity_per_plant(read_latest=read_latest)
+    time_series_historical_capacity =save_historical_capacity_per_plant(location,read_latest=read_latest)
 
     gen_cols = list(mega_gen_fuel_df.columns[['Netgen' in x for x in mega_gen_fuel_df.columns]])
 
