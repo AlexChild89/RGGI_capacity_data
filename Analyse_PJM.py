@@ -130,3 +130,20 @@ def run_future_RGGI_share():
     rggi_share_pjm['RGGI_share_PJM'] = rggi_share_pjm['RGGI_share_PJM'].fillna(0) """
 
     return rggi_pjm_rggi_plus_retirements_plus_additions_timeseries,pjm_plus_retirements_plus_additions_timeseries,PJM_plants
+
+def run_full_relative_capacity_PJM(read_latest):
+    historical_rggi_share_pjm,test_df = run_historical_RGGI_share(read_latest=read_latest)
+    historical_rggi_share_pjm['RGGI_share'] = historical_rggi_share_pjm[1]/historical_rggi_share_pjm[[1,0]].sum(axis=1)
+    rggi_pjm_rggi_plus_retirements_plus_additions_timeseries,pjm_plus_retirements_plus_additions_timeseries,PJM_plants =  run_future_RGGI_share()
+    rggi_share_pjm = pjm_plus_retirements_plus_additions_timeseries.iloc[1:].stack().to_frame('PJM').join(rggi_pjm_rggi_plus_retirements_plus_additions_timeseries.iloc[1:].stack().to_frame('RGGI_PJM'))
+    rggi_share_pjm = rggi_share_pjm.reset_index()
+
+    rggi_share_pjm['RGGI_share'] = rggi_share_pjm['RGGI_PJM']/rggi_share_pjm['PJM']
+    rggi_share_pjm['report_month'] = rggi_share_pjm.level_0.dt.month
+    rggi_share_pjm['report_year'] = rggi_share_pjm.level_0.dt.year
+    rggi_share_pjm['level_0'] = rggi_share_pjm['level_0']+pd.offsets.MonthEnd(0)
+    rggi_share_pjm = rggi_share_pjm.rename(columns={'level_1':'PJM_tech',
+                                                    'level_0':'Date'})
+    historical_and_forecast = pd.concat([historical_rggi_share_pjm,rggi_share_pjm[['Date','PJM_tech','RGGI_share','report_month','report_year']]],axis=0,join='outer')#.to_csv('RGGI_share_PJM.csv')
+
+    return historical_and_forecast
