@@ -86,10 +86,10 @@ class RGGI_capacity:
                 next_update_time,recent_report,report_month,report_year,date_of_last_report  =self.scrape_recent_EIA_860m(lagged_report=x)
                 capacity = self.analyse_all_capacity_with_tech(recent_report,report_month,report_year)
                 time_series_historical_capacity = pd.concat([time_series_historical_capacity,capacity],axis=0)
-            folder= GRAPH_API(self.location).find_uniquefolder('\Corporate\Shared Analysis\RGGI_ISO_power_data\PJM\EIA_data')
-            object = pickle.dumps(time_series_historical_capacity)
-            GRAPH_API(self.location).upload_object(object,os.environ['CCap_docs'],folder,'full_capacity_series_with_tech.pkl')
             
+            folder= GRAPH_API(self.location).find_uniquefolder('/Corporate/Shared Analysis/RGGI_ISO_power_data/PJM/EIA_data')
+            resp = GRAPH_API(self.location).upload_large_file_by_chunks(time_series_historical_capacity,os.environ['CCap_docs'],folder,'full_capacity_series_with_tech.pkl')
+            print(f'saving down capacity with response: {resp}')
         else:
             filestream = GRAPH_API(self.location).download_file('/Corporate/Shared Analysis/RGGI_ISO_power_data/PJM/EIA_data/full_capacity_series_with_tech.pkl')
             time_series_historical_capacity = pd.read_pickle(filestream)
@@ -104,7 +104,7 @@ class RGGI_capacity:
         RGGI_plants['PlantName_GenID'] = RGGI_plants['Plant Name'] +' '+ RGGI_plants['Generator ID']
 
         ### Retirement Date
-        RGGI_plants[['year','month']] = RGGI_plants[['Planned Retirement Year','Planned Retirement Month']]
+        RGGI_plants[['year','month']] = RGGI_plants[['Planned Retirement Year','Planned Retirement Month']].replace(' ','').fillna('')
         RGGI_plants['year'] = RGGI_plants['year'].astype(str).str.rstrip().replace('',2100).astype(int)
         RGGI_plants['month'] = RGGI_plants['month'].astype(str).str.rstrip().replace('',12).astype(int)
         RGGI_plants['day']=1
@@ -188,9 +188,9 @@ class RGGI_capacity:
 
     def RGGI_capacity_charts(self,RGGI_plants,additions,approved_additions,not_yet_approved_additions):
 
-        figure1 = px.bar(RGGI_plants.query('Fossil==1 and retirement_date<"2100-01-01"'),x='retirement_date',color='Technology',y='Nameplate Capacity (MW)',barmode='group',hover_data=['Plant State','Plant Name'],
+        figure1 = px.bar(RGGI_plants.query('Fossil==1 and retirement_date<"2031-01-01"'),x='retirement_date',color='Technology',y='Nameplate Capacity (MW)',barmode='group',hover_data=['Plant State','Plant Name'],
             title='RGGI Planned Fossil Retirements up until 2100')
-        figure2 = px.bar(RGGI_plants.query('Fossil==1 and retirement_date_original<"2100-01-01"'),x='retirement_date_original',color='Technology',y='Nameplate Capacity (MW)',barmode='group',hover_data=['Plant State','Plant Name'],
+        figure2 = px.bar(RGGI_plants.query('Fossil==1 and retirement_date_original<"2031-01-01"'),x='retirement_date_original',color='Technology',y='Nameplate Capacity (MW)',barmode='group',hover_data=['Plant State','Plant Name'],
             title='PJM-adjusted RGGI Planned Fossil Retirements up until 2100')
         figure2 = figure2.update_layout(showlegend=False)
         figure1_traces = []
@@ -210,15 +210,27 @@ class RGGI_capacity:
         for traces in figure2_traces:
             planned_fossil_retirments_fig.append_trace(traces, row=1, col=2)
 
+        ## Cumulative RGGI retirements
+        cumulative_retirements = -RGGI_plants.groupby(['retirement_date','Technology'])['Nameplate Capacity (MW)'].sum().unstack('Technology').fillna(0).cumsum().iloc[:-1]
+        cumulative_retirements_fig = px.line(cumulative_retirements.loc[:'2040'],labels={'value':'Capacity (MW)'},title='RGGI Cumulative Retirements (PJM rmrs included)')
 
         rggi_capacity_by_tech = RGGI_plants.groupby('Technology')['Nameplate Capacity (MW)'].sum()
-        rggi_capacity_by_tech_fig = px.bar(rggi_capacity_by_tech)
+        rggi_capacity_by_tech_fig = px.bar(rggi_capacity_by_tech,labels={'value':'Capacity (MW)'},title='Current RGGI Capacity by Technology')
         
         all_planned_capacity_fig = px.area(additions.cumsum(),labels={'value':'Capacity (MW)'},title='RGGI Planned Capacity At all stages',width=900)
         approved_capacity_fig = px.area(approved_additions.cumsum(),labels={'value':'Capacity (MW)'},title='Approved RGGI State Capacity Pipeline',width=900)
         not_yet_approved_capacity_fig = px.area(not_yet_approved_additions.cumsum(),labels={'value':'Capacity (MW)'},title='Not Yet Approved RGGI State Capacity Pipeline',width=900)
+        
+        renewables_tech = ['Conventional Hydroelectric', 'Hydroelectric Pumped Storage','Wood/Wood Waste Biomass','Batteries',
+                   'Solar Photovoltaic',
+       'Onshore Wind Turbine', 'Municipal Solid Waste',
+       'Other Waste Biomass', 'Landfill Gas','Offshore Wind Turbine']
+        total_RE_vs_approved = additions[additions.columns[additions.columns.isin(renewables_tech)]].sum(axis=1).to_frame('total_RE_additions').join(approved_additions[approved_additions.columns[approved_additions.columns.isin(renewables_tech)]].sum(axis=1).to_frame('total_Approved_RE_additions')).fillna(0).cumsum()
+        RE_total_vs_approved_fig  = px.line(total_RE_vs_approved,
+                labels={'value':'Capacity (MW)'},title='Total RGGI Planned Renewable Additions versus Approved RGGI Renewable Additions')
 
-        return planned_fossil_retirments_fig,all_planned_capacity_fig,approved_capacity_fig, not_yet_approved_capacity_fig
+
+        return planned_fossil_retirments_fig,all_planned_capacity_fig,approved_capacity_fig, not_yet_approved_capacity_fig,RE_total_vs_approved_fig,cumulative_retirements_fig,rggi_capacity_by_tech_fig
     
     def estimated_timeseries_capacity(self,RGGI_plants,full_tech_list,additions,date_of_last_report,PJM_retiredates=True):
         today_string = date_of_last_report.strftime('%Y-%m-%d').split('-')

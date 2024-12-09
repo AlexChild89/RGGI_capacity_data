@@ -34,8 +34,8 @@ install(github_repository)
 from SharePointv2.Sharepoint_API import GRAPH_API
 
 from RGGI_plant_analysis import RGGI_capacity
-from Analyse_PJM_V2 import clean_historical_generators,calculate_historical_PJM_share,run_future_RGGI_share
-from Analyse_PJM import run_full_relative_capacity_PJM
+from Analyse_PJM_generation import clean_historical_generators,calculate_historical_PJM_share,run_future_RGGI_share
+from Analyse_PJM_capacity import run_full_relative_capacity_PJM
 
 Alex_id = os.environ['EmailID'] 
 toEmail = ['research@carbon-cap.com','alex.child@carbon-cap.com'] #
